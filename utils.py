@@ -1,3 +1,4 @@
+import os
 import torch
 from torchvision import transforms
 from torchvision.transforms import functional as TF
@@ -20,7 +21,7 @@ def transform(img, gt, random_seed: int = None):
     
     if random_seed is not None:
         torch.manual_seed(random_seed)
-    transformation = transforms.Compose(*[transforms.RandomPerspective(p = 1),
+    transformation = transforms.Compose([transforms.RandomPerspective(p = 1),
                                           transforms.RandomRotation(degrees = math.pi / 4,expand = True),])
     stacked = torch.stack(tensors = [img, gt], dim = 0)
     stacked = transformation(stacked)
@@ -28,7 +29,7 @@ def transform(img, gt, random_seed: int = None):
     img = transforms.ColorJitter()(img)
     return img, gt
 
-def train(dataloader, model, num_epochs = 100, learning_rate = 10**-3, loss_func = None, pretrain_name="scratch", start=0, end_learning_rate = None, report_step = 50):
+def train(dataloader, model, num_epochs = 100, learning_rate = 10**-3, loss_func = None, pretrain_name="scratch", start=0, end_learning_rate = None, report_step = 1000, vali_dataloader = None):
     model.train()
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     if end_learning_rate is not None:
@@ -50,14 +51,28 @@ def train(dataloader, model, num_epochs = 100, learning_rate = 10**-3, loss_func
             print(f"Epoch {e}/{num_epochs} --- Batch {idx + 1}/{len(dataloader)} --- Loss {loss.item():.4f}", end='\r')
             accu_loss+= loss.detach()
             if ((idx + 1)*dataloader.batch_size) % report_step == 0:
-                wandb.log({"Loss": accu_loss.item() / report_step})
+                wandb.log({"Train Loss": accu_loss.item() / report_step})
                 accu_loss = 0
                 table = wandb.Table(columns=["Predict", "Target"])
                 table.add_data(wandb.Image(pred[0]),
                                wandb.Image(argmax2img(y[0])))
-                wandb.log({f"Comparision:": table})
+                wandb.log({f"Comparision": table})
+
+                # Validation
+                if vali_dataloader is not None:
+                    model.eval()
+                    with torch.no_grad():
+                        vali_loss = 0
+                        for idx, (x, y) in enumerate(vali_dataloader):
+                            x, y = x.to(pr.device), y.to(pr.device)
+                            pred = model(x)
+                            y = TF.center_crop(y, [pred.shape[-2], pred.shape[-1]])
+                            vali_loss += loss_func(pred, y)
+                        vali_loss /= len(vali_dataloader)
+                        wandb.log({"Validation Loss": vali_loss.item()})
+                    model.train()
         scheduler.step()
         
-        checkpoint_path = f"{pretrain_name}_{datetime.now(tz=timezone(timedelta(hours=7)))}_{e}.pth"
-        torch.save({"model_state_dict":model.state_dict(),
-                        "optimizer_state_dict":optimizer.state_dict()}, checkpoint_path)
+        checkpoint_path = f"{pretrain_name}_{datetime.now(tz=timezone(timedelta(hours=7))).strftime(r'%m%d%Y_%H%M%S')}_{e}.pth"
+        torch.save({"model":model,
+                        "optimizer_state_dict":optimizer.state_dict()}, os.path.join(pr.CHECKPOINT_DIR, checkpoint_path))

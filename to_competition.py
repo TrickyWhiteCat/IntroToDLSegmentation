@@ -18,18 +18,19 @@ except FileExistsError:
     pass
 to_tensor = transforms.ToTensor()
 
-model = torch.load(f"{pr.CHECKPOINT_DIR}/{pr.CHECKPOINT_PATH}", map_location=pr.device)
+model = torch.load(f"{pr.CHECKPOINT_DIR}/{pr.CHECKPOINT_PATH}", map_location=pr.device)["model"]
+model.eval()
 
 with torch.no_grad():
     for file_name in tqdm(os.listdir(pr.TEST_DIR)):
-        img = read_image(f"{pr.TEST_DIR}/{file_name}")
+        img = read_image(f"{pr.TEST_DIR}/{file_name}") / 255
         original_size = [val for val in img.shape[:-1]] 
-        resized = TF.resize(to_tensor(img).unsqueeze(0), pr.img_size) 
+        resized = TF.resize(img.unsqueeze(0), pr.img_size) 
         pred = model(resized.to(pr.device)).detach().cpu() 
         
         resized_pred = TF.resize(pred, original_size)
-        res = utils.argmax2img(resized_pred[0].argmax(dim=0))
-        write_png(res, f"{pr.OUTPUT_DIR}/{file_name[:-5]}.png")
+        res = (utils.argmax2img(resized_pred[0].argmax(dim=0)) * 255).type(torch.uint8)
+        write_png(res, f"{pr.OUTPUT_DIR}/{file_name[:-5]}.png", compression_level=0)
 
 
 import pandas as pd
@@ -83,4 +84,4 @@ res = mask2string(dir)
 df = pd.DataFrame(columns=['Id', 'Expected'])
 df['Id'] = res['ids']
 df['Expected'] = res['strings']
-df.to_csv(r'soutput.csv', index=False)
+df.to_csv(r'output.csv', index=False)
