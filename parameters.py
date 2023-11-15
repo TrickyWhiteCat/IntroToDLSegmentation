@@ -11,7 +11,7 @@ num_workers = 2
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 learning_rate = 10**-3
-end_learning_rate = 10*678*-5
+end_learning_rate = 10**-5
 num_epochs = 50
 batch_size = 1
 img_size = (736, 960)

@@ -2,6 +2,7 @@ from torchvision import io
 import torch
 import argparse
 import utils
+from model import *
 
 def main():
     parser = argparse.ArgumentParser(description='Model inference')
@@ -20,5 +21,8 @@ def main():
     img = io.read_image(input_path) / 255
     img = img.unsqueeze(0)
     pred = model(img)
-    out_img = utils.argmax2img(pred[0].argmax(dim=0))
+    out_img = (utils.argmax2img(pred[0].argmax(dim=0)) * 255).type(torch.uint8)
     io.write_png(out_img, output_path)
+
+if __name__ == '__main__':
+    main()
